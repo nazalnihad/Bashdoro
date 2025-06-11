@@ -1,9 +1,8 @@
 # Bashdoro: A CLI Pomodoro
 
-**Bashdoro** a command-line Pomodoro timer written in Bash 
+**Bashdoro** a command-line Pomodoro timer 
 
-
-- **Keyboard Controls**:
+## Controls:
   - `p/P`: Pause/resume
   - `r/R`: Restart session
   - `q/Q`: Quit
@@ -64,7 +63,7 @@
   ```bash
   yay -S figlet-fonts
   ```
-  or download from [fonts](ftp://ftp.figlet.org/pub/figlet/fonts/)
+  or download from [fonts](https://github.com/xero/figlet-fonts)
 
 ## Changing Fonts
 
