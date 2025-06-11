@@ -76,10 +76,11 @@
   print_centered "$(figlet -f small "$msg")" "$CYAN"
   ```
 
-Check your terminal size with:
-```bash
-tput cols; tput lines
-```
+## Screenshots
+
+Example of Bashdoro running in the terminal with epic.flf font:
+
+![Example](image.png)
 
 ---
 
