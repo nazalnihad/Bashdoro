@@ -20,23 +20,23 @@
 
 1. Save the script:
    ```bash
-   nano bashdoro.sh
+   nano pomodoro.sh
    ```
    Paste the script and save or clone the repo.
 2. Make it executable:
    ```bash
-   chmod +x bashdoro.sh
+   chmod +x pomodoro.sh
    ```
    
 ## Usage
 
 - Normal mode:
   ```bash
-  ./bashdoro.sh
+  ./pomodoro.sh
   ```
 - Test mode:
   ```bash
-  ./bashdoro.sh --test
+  ./pomodoro.sh --test
   ```
 
 ## Controls
