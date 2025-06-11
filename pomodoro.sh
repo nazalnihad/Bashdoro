@@ -31,7 +31,7 @@ print_centered() {
 display_timer() {
     local minutes=$1 seconds=$2 status=$3 session=$4 type=$5 msg_idx=$6
     local time_str=$(printf "%02d:%02d" $minutes $seconds)
-    local ascii=$(figlet -f banner "$(echo "$time_str" | sed 's/:/ : /')")
+    local ascii=$(figlet -f epic "$(echo "$time_str" | sed 's/:/ : /')")
     local ui_height=$(( $(echo "$ascii" | wc -l) + 10 ))
     local top_pad=$(( ( $(tput lines) - ui_height ) / 2 ))
     [ $top_pad -lt 0 ] && top_pad=0
