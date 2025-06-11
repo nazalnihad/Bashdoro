@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Bashdoro: Minimal Pomodoro timer
-
 if ! command -v figlet >/dev/null 2>&1; then
     echo "Error: figlet required. Install with: sudo pacman -S figlet (Arch Linux)"
     exit 1
@@ -21,8 +19,7 @@ fi
 
 # Messages
 MOTIVATIONAL_MESSAGES=("Keep pushing forward!" "You're doing great!" "Stay focused, you got this!" "One step at a time!" "Great work, keep it up!")
-
-# Center text or ASCII art
+ 
 print_centered() {
     local text="$1" color="$2"
     local width=$(tput cols)
@@ -34,7 +31,7 @@ print_centered() {
 display_timer() {
     local minutes=$1 seconds=$2 status=$3 session=$4 type=$5 msg_idx=$6
     local time_str=$(printf "%02d:%02d" $minutes $seconds)
-    local ascii=$(figlet -f epic "$(echo "$time_str" | sed 's/:/ : /')")
+    local ascii=$(figlet -f banner "$(echo "$time_str" | sed 's/:/ : /')")
     local ui_height=$(( $(echo "$ascii" | wc -l) + 10 ))
     local top_pad=$(( ( $(tput lines) - ui_height ) / 2 ))
     [ $top_pad -lt 0 ] && top_pad=0
