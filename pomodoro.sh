@@ -44,6 +44,7 @@ TIMER_ROW_START=0
 TIMER_ROW_LINES=0
 MUSIC_SHOULD_RESUME=0
 TIMER_PAUSED=0
+MUSIC_WAS_PLAYING=0
 
 # Messages
 MOTIVATIONAL_MESSAGES=("Keep pushing forward!" "You're doing great!" "Stay focused, you got this!" "One step at a time!" "Great work, keep it up!")
@@ -54,66 +55,71 @@ play_sound_file() {
     local sound_file="$1"
     [ ! -f "$sound_file" ] && return
 
+    # optional second arg: "block" to play synchronously
+    local mode="$2"
     local ext="${sound_file##*.}"
 
-    if [ "$ext" = "mp3" ]; then
-        if command -v mpg123 >/dev/null 2>&1; then
-            nohup mpg123 -q "$sound_file" </dev/null >/dev/null 2>&1 &
+    if [ "$mode" = "block" ]; then
+        # Blocking playback
+        if [ "$ext" = "mp3" ] && command -v mpg123 >/dev/null 2>&1; then
+            mpg123 -q "$sound_file" >/dev/null 2>&1
         elif command -v paplay >/dev/null 2>&1; then
-            # Some paplay builds handle mp3 via PulseAudio modules; try anyway
-            nohup paplay "$sound_file" </dev/null >/dev/null 2>&1 &
+            paplay "$sound_file" >/dev/null 2>&1
         elif command -v aplay >/dev/null 2>&1; then
-            # aplay doesn't play mp3; skip silently
-            :
+            aplay -q "$sound_file" >/dev/null 2>&1
+        elif command -v cvlc >/dev/null 2>&1; then
+            cvlc --play-and-exit --intf dummy "$sound_file" >/dev/null 2>&1
         fi
     else
-        # Assume WAV or other raw format
-        if command -v paplay >/dev/null 2>&1; then
-            nohup paplay "$sound_file" </dev/null >/dev/null 2>&1 &
+        # Non-blocking playback (no nohup, so it dies with SIGHUP on terminal close)
+        if [ "$ext" = "mp3" ] && command -v mpg123 >/dev/null 2>&1; then
+            mpg123 -q "$sound_file" </dev/null >/dev/null 2>&1 &
+        elif command -v paplay >/dev/null 2>&1; then
+            paplay "$sound_file" </dev/null >/dev/null 2>&1 &
         elif command -v aplay >/dev/null 2>&1; then
-            nohup aplay -q "$sound_file" </dev/null >/dev/null 2>&1 &
-        elif command -v mpg123 >/dev/null 2>&1; then
-            # mpg123 won't play wav; skip
-            :
+            aplay -q "$sound_file" </dev/null >/dev/null 2>&1 &
+        elif command -v cvlc >/dev/null 2>&1; then
+            cvlc --play-and-exit --intf dummy "$sound_file" </dev/null >/dev/null 2>&1 &
         fi
     fi
 }
 
 play_start_sound() {
-    # Temporarily pause background music if playing (so sound effect is clear)
-    if [ $MUSIC_MUTED -eq 0 ] && [ -n "$MUSIC_PID" ]; then
+    # Pause background music if it's playing, play effect synchronously, then resume
+    MUSIC_WAS_PLAYING=0
+    if [ "$MUSIC_MUTED" -eq 0 ] && [ -n "$MUSIC_PID" ]; then
+        MUSIC_WAS_PLAYING=1
         stop_background_music
-        MUSIC_SHOULD_RESUME=1
     fi
     if [ -f "$SOUNDS_DIR/start.wav" ]; then
-        play_sound_file "$SOUNDS_DIR/start.wav"
+        play_sound_file "$SOUNDS_DIR/start.wav" "block"
     elif [ -f "$SOUNDS_DIR/start.mp3" ]; then
-        play_sound_file "$SOUNDS_DIR/start.mp3"
+        play_sound_file "$SOUNDS_DIR/start.mp3" "block"
     else
         for ((i=0; i<3; i++)); do printf "\a"; sleep 0.1; done
     fi
-    # Resume music if it was playing
-    if [ $MUSIC_SHOULD_RESUME -eq 1 ] && [ $MUSIC_MUTED -eq 0 ]; then
+    if [ "$MUSIC_WAS_PLAYING" -eq 1 ] && [ "$MUSIC_MUTED" -eq 0 ]; then
         play_background_music
-        MUSIC_SHOULD_RESUME=0
+        MUSIC_WAS_PLAYING=0
     fi
 }
 
 play_stop_sound() {
-    if [ $MUSIC_MUTED -eq 0 ] && [ -n "$MUSIC_PID" ]; then
+    MUSIC_WAS_PLAYING=0
+    if [ "$MUSIC_MUTED" -eq 0 ] && [ -n "$MUSIC_PID" ]; then
+        MUSIC_WAS_PLAYING=1
         stop_background_music
-        MUSIC_SHOULD_RESUME=1
     fi
     if [ -f "$SOUNDS_DIR/stop.wav" ]; then
-        play_sound_file "$SOUNDS_DIR/stop.wav"
+        play_sound_file "$SOUNDS_DIR/stop.wav" "block"
     elif [ -f "$SOUNDS_DIR/stop.mp3" ]; then
-        play_sound_file "$SOUNDS_DIR/stop.mp3"
+        play_sound_file "$SOUNDS_DIR/stop.mp3" "block"
     else
         for ((i=0; i<3; i++)); do printf "\a"; sleep 0.15; done
     fi
-    if [ $MUSIC_SHOULD_RESUME -eq 1 ] && [ $MUSIC_MUTED -eq 0 ]; then
+    if [ "$MUSIC_WAS_PLAYING" -eq 1 ] && [ "$MUSIC_MUTED" -eq 0 ]; then
         play_background_music
-        MUSIC_SHOULD_RESUME=0
+        MUSIC_WAS_PLAYING=0
     fi
 }
 
@@ -137,7 +143,7 @@ play_background_music() {
 
         local ext="${ambience_file##*.}"
         if [ "$ext" = "mp3" ] && command -v mpg123 >/dev/null 2>&1; then
-            nohup mpg123 -q --loop -1 "$ambience_file" </dev/null >/dev/null 2>&1 &
+            mpg123 -q --loop -1 "$ambience_file" </dev/null >/dev/null 2>&1 &
             MUSIC_PID=$!
         elif [ "$ext" != "mp3" ] && command -v paplay >/dev/null 2>&1; then
             (
@@ -173,12 +179,14 @@ stop_background_music() {
         MUSIC_PID=""
     fi
     # Best-effort cleanup for loops
-    pkill -f "mpg123.*ambience" 2>/dev/null
-    pkill -f "mpg123.*background" 2>/dev/null
-    pkill -f "paplay.*ambience" 2>/dev/null
-    pkill -f "paplay.*background" 2>/dev/null
-    pkill -f "aplay.*ambience" 2>/dev/null
-    pkill -f "aplay.*background" 2>/dev/null
+    pkill -9 -f "mpg123.*ambience" 2>/dev/null
+    pkill -9 -f "mpg123.*background" 2>/dev/null
+    pkill -9 -f "paplay.*ambience" 2>/dev/null
+    pkill -9 -f "paplay.*background" 2>/dev/null
+    pkill -9 -f "aplay.*ambience" 2>/dev/null
+    pkill -9 -f "aplay.*background" 2>/dev/null
+    pkill -9 -f "pw-play.*ambience" 2>/dev/null
+    pkill -9 -f "pw-play.*background" 2>/dev/null
 }
 
 ## Remove legacy duplicated sound functions referencing /tmp (cleaned)
@@ -225,7 +233,7 @@ has_terminal_resized() {
 display_timer() {
     # Full UI render (stores rows for incremental updates)
     local minutes=$1 seconds=$2 status=$3 session=$4 type=$5 msg_idx=$6
-    local time_str=$(printf "%02d:%02d" $minutes $seconds)
+    local time_str=$(printf "%02d : %02d" $minutes $seconds)
     local term_width=$(tput cols)
     local term_height=$(tput lines)
 
@@ -297,7 +305,7 @@ update_timer() {
     local term_width=$(tput cols)
     local figlet_font="standard"
     if [ "$term_width" -ge 80 ]; then figlet_font="big"; elif [ "$term_width" -ge 60 ]; then figlet_font="standard"; else figlet_font="small"; fi
-    local time_str=$(printf "%02d:%02d" $minutes $seconds)
+    local time_str=$(printf "%02d : %02d" $minutes $seconds)
     local ascii=$(figlet -f "$figlet_font" -w "$term_width" "$time_str" 2>/dev/null)
     [ -z "$ascii" ] && ascii=$(figlet -f standard "$time_str" 2>/dev/null)
 
@@ -427,9 +435,38 @@ pomodoro() {
     LAST_COLS=$(tput cols)
     LAST_LINES=$(tput lines)
     
+    # Set process group to ensure all child processes get killed
+    set -m
+    
     tput civis
     stty -echo
-    trap 'tput cnorm; stty echo; stop_background_music; clear' EXIT INT TERM
+    cleanup() {
+        tput cnorm 2>/dev/null || true
+        stty echo 2>/dev/null || true
+        stop_background_music
+        
+        # Kill all processes in this process group (PipeWire/PulseAudio aggressive cleanup)
+        local pgid=$(ps -o pgid= $$ | tr -d ' ')
+        [ -n "$pgid" ] && kill -TERM -$pgid 2>/dev/null || true
+        sleep 0.05
+        [ -n "$pgid" ] && kill -KILL -$pgid 2>/dev/null || true
+        
+        # Best-effort cleanup for any lingering players by pattern
+        pkill -9 -f "mpg123.*ambience" 2>/dev/null || true
+        pkill -9 -f "mpg123.*background" 2>/dev/null || true
+        pkill -9 -f "paplay.*ambience" 2>/dev/null || true
+        pkill -9 -f "paplay.*background" 2>/dev/null || true
+        pkill -9 -f "aplay.*ambience" 2>/dev/null || true
+        pkill -9 -f "aplay.*background" 2>/dev/null || true
+        pkill -9 -f "cvlc.*ambience" 2>/dev/null || true
+        
+        # PipeWire-specific: kill pw-play processes if they exist
+        pkill -9 -f "pw-play.*ambience" 2>/dev/null || true
+        pkill -9 -f "pw-play.*background" 2>/dev/null || true
+        
+        clear
+    }
+    trap 'cleanup' EXIT INT TERM HUP QUIT
     trap 'RESIZED=1' WINCH
     
     # Start background music if enabled
@@ -474,10 +511,12 @@ pomodoro() {
                     paused=$((1 - paused))
                     if [ $paused -eq 1 ]; then
                         TIMER_PAUSED=1
-                        # Pause background music (resume later)
+                        # Pause background music (remember to resume later)
                         if [ $MUSIC_MUTED -eq 0 ] && [ -n "$MUSIC_PID" ]; then
-                            MUSIC_SHOULD_RESUME=1
+                            MUSIC_WAS_PLAYING=1
                             stop_background_music
+                        else
+                            MUSIC_WAS_PLAYING=0
                         fi
                         display_timer $((seconds/60)) $((seconds%60)) "⏸ Paused" $session_count "$type" $msg_idx
                         while [ $paused -eq 1 ]; do
@@ -485,9 +524,9 @@ pomodoro() {
                             [ "$RESIZED" = "1" ] && display_timer $((seconds/60)) $((seconds%60)) "⏸ Paused" $session_count "$type" $msg_idx && RESIZED=0
                             case $key in
                                 p|P) paused=0; TIMER_PAUSED=0; 
-                                     # Resume music if needed and unmuted
-                                     if [ $MUSIC_SHOULD_RESUME -eq 1 ] && [ $MUSIC_MUTED -eq 0 ]; then
-                                         play_background_music; MUSIC_SHOULD_RESUME=0; 
+                                     # Resume music if it was playing and unmuted
+                                     if [ $MUSIC_WAS_PLAYING -eq 1 ] && [ $MUSIC_MUTED -eq 0 ]; then
+                                         play_background_music; MUSIC_WAS_PLAYING=0; 
                                      fi
                                      display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
                                 r|R) seconds=$duration; paused=0; display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
