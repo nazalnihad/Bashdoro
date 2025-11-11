@@ -60,15 +60,15 @@ play_sound_file() {
     local ext="${sound_file##*.}"
 
     if [ "$mode" = "block" ]; then
-        # Blocking playback
+        # Blocking playback - still needs stdin redirect to properly die with terminal
         if [ "$ext" = "mp3" ] && command -v mpg123 >/dev/null 2>&1; then
-            mpg123 -q "$sound_file" >/dev/null 2>&1
+            mpg123 -q "$sound_file" </dev/null >/dev/null 2>&1
         elif command -v paplay >/dev/null 2>&1; then
-            paplay "$sound_file" >/dev/null 2>&1
+            paplay "$sound_file" </dev/null >/dev/null 2>&1
         elif command -v aplay >/dev/null 2>&1; then
-            aplay -q "$sound_file" >/dev/null 2>&1
+            aplay -q "$sound_file" </dev/null >/dev/null 2>&1
         elif command -v cvlc >/dev/null 2>&1; then
-            cvlc --play-and-exit --intf dummy "$sound_file" >/dev/null 2>&1
+            cvlc --play-and-exit --intf dummy "$sound_file" </dev/null >/dev/null 2>&1
         fi
     else
         # Non-blocking playback (no nohup, so it dies with SIGHUP on terminal close)
@@ -352,62 +352,72 @@ read_key() {
 }
 
 set_timer_durations() {
-    clear
-    echo "${CYAN}Welcome to Bashdoro!${NC}"
-    echo
-    echo "1) 25 min work / 5 min break (default)"
-    echo "2) 50 min work / 10 min break"
-    echo "3) Custom durations"
-    echo
-    echo -n "Enter choice (1-3 or q to quit): "
-    read choice
-    [ "$choice" = "q" ] || [ "$choice" = "Q" ] && clear && exit 0
+    local choice=""
+    local valid=0
+    
+    while [ $valid -eq 0 ]; do
+        clear
+        echo "${CYAN}Welcome to Bashdoro!${NC}"
+        echo
+        echo "1) 25 min work / 5 min break (default)"
+        echo "2) 50 min work / 10 min break"
+        echo "3) Custom durations"
+        echo
+        echo -n "Enter choice (1-3 or q to quit): "
+        read -r choice
+        
+        # Handle quit first, before validation
+        if [ "$choice" = "q" ] || [ "$choice" = "Q" ]; then
+            clear
+            exit 0
+        fi
 
-    case $choice in
-        1)
-            WORK_DURATION=25
-            BREAK_DURATION=5
-            LONG_BREAK_DURATION=15
-            SESSIONS_BEFORE_LONG_BREAK=4
-            ;;
-        2)
-            WORK_DURATION=50
-            BREAK_DURATION=10
-            LONG_BREAK_DURATION=30
-            SESSIONS_BEFORE_LONG_BREAK=4
-            ;;
-        3)
-            echo -n "Work duration (minutes, q to quit): "
-            read WORK_DURATION
-            [ "$WORK_DURATION" = "q" ] || [ "$WORK_DURATION" = "Q" ] && clear && exit 0
-            echo -n "Break duration (minutes, q to quit): "
-            read BREAK_DURATION
-            [ "$BREAK_DURATION" = "q" ] || [ "$BREAK_DURATION" = "Q" ] && clear && exit 0
-            echo -n "Long break duration (minutes, q to quit): "
-            read LONG_BREAK_DURATION
-            [ "$LONG_BREAK_DURATION" = "q" ] || [ "$LONG_BREAK_DURATION" = "Q" ] && clear && exit 0
-            echo -n "Sessions before long break (default 4, q to quit): "
-            read SESSIONS_BEFORE_LONG_BREAK
-            [ "$SESSIONS_BEFORE_LONG_BREAK" = "q" ] || [ "$SESSIONS_BEFORE_LONG_BREAK" = "Q" ] && clear && exit 0
-            if ! [[ "$WORK_DURATION" =~ ^[0-9]+$ ]] || ! [[ "$BREAK_DURATION" =~ ^[0-9]+$ ]] || ! [[ "$LONG_BREAK_DURATION" =~ ^[0-9]+$ ]]; then
-                echo "Invalid duration. Using default 25/5."
+        case $choice in
+            1)
                 WORK_DURATION=25
                 BREAK_DURATION=5
                 LONG_BREAK_DURATION=15
-            fi
-            if ! [[ "$SESSIONS_BEFORE_LONG_BREAK" =~ ^[0-9]+$ ]] || [ "$SESSIONS_BEFORE_LONG_BREAK" -lt 1 ]; then
-                echo "Invalid session count. Using default 4."
                 SESSIONS_BEFORE_LONG_BREAK=4
-            fi
-            ;;
-        *)
-            echo "Invalid choice. Using default 25/5."
-            WORK_DURATION=25
-            BREAK_DURATION=5
-            LONG_BREAK_DURATION=15
-            SESSIONS_BEFORE_LONG_BREAK=4
-            ;;
-    esac
+                valid=1
+                ;;
+            2)
+                WORK_DURATION=50
+                BREAK_DURATION=10
+                LONG_BREAK_DURATION=30
+                SESSIONS_BEFORE_LONG_BREAK=4
+                valid=1
+                ;;
+            3)
+                echo -n "Work duration (minutes, q to quit): "
+                read WORK_DURATION
+                [ "$WORK_DURATION" = "q" ] || [ "$WORK_DURATION" = "Q" ] && clear && exit 0
+                echo -n "Break duration (minutes, q to quit): "
+                read BREAK_DURATION
+                [ "$BREAK_DURATION" = "q" ] || [ "$BREAK_DURATION" = "Q" ] && clear && exit 0
+                echo -n "Long break duration (minutes, q to quit): "
+                read LONG_BREAK_DURATION
+                [ "$LONG_BREAK_DURATION" = "q" ] || [ "$LONG_BREAK_DURATION" = "Q" ] && clear && exit 0
+                echo -n "Sessions before long break (default 4, q to quit): "
+                read SESSIONS_BEFORE_LONG_BREAK
+                [ "$SESSIONS_BEFORE_LONG_BREAK" = "q" ] || [ "$SESSIONS_BEFORE_LONG_BREAK" = "Q" ] && clear && exit 0
+                if ! [[ "$WORK_DURATION" =~ ^[0-9]+$ ]] || ! [[ "$BREAK_DURATION" =~ ^[0-9]+$ ]] || ! [[ "$LONG_BREAK_DURATION" =~ ^[0-9]+$ ]]; then
+                    echo "${RED}Invalid duration. Please try again.${NC}"
+                    sleep 2
+                    valid=0
+                elif ! [[ "$SESSIONS_BEFORE_LONG_BREAK" =~ ^[0-9]+$ ]] || [ "$SESSIONS_BEFORE_LONG_BREAK" -lt 1 ]; then
+                    echo "${RED}Invalid session count. Please try again.${NC}"
+                    sleep 2
+                    valid=0
+                else
+                    valid=1
+                fi
+                ;;
+            *)
+                echo "${RED}Invalid choice. Please enter 1, 2, 3, or q.${NC}"
+                sleep 2
+                ;;
+        esac
+    done
     
     # Ask about background music
     echo
@@ -435,34 +445,33 @@ pomodoro() {
     LAST_COLS=$(tput cols)
     LAST_LINES=$(tput lines)
     
-    # Set process group to ensure all child processes get killed
-    set -m
-    
     tput civis
     stty -echo
     cleanup() {
-        tput cnorm 2>/dev/null || true
-        stty echo 2>/dev/null || true
+        tput cnorm 2>/dev/null
+        stty echo 2>/dev/null
         stop_background_music
         
-        # Kill all processes in this process group (PipeWire/PulseAudio aggressive cleanup)
-        local pgid=$(ps -o pgid= $$ | tr -d ' ')
-        [ -n "$pgid" ] && kill -TERM -$pgid 2>/dev/null || true
-        sleep 0.05
-        [ -n "$pgid" ] && kill -KILL -$pgid 2>/dev/null || true
+        # Kill all audio processes started by this script
+        # Background music
+        pkill -9 -f "mpg123.*ambience" 2>/dev/null
+        pkill -9 -f "mpg123.*background" 2>/dev/null
+        pkill -9 -f "paplay.*ambience" 2>/dev/null
+        pkill -9 -f "paplay.*background" 2>/dev/null
+        pkill -9 -f "aplay.*ambience" 2>/dev/null
+        pkill -9 -f "aplay.*background" 2>/dev/null
+        pkill -9 -f "pw-play.*ambience" 2>/dev/null
+        pkill -9 -f "pw-play.*background" 2>/dev/null
         
-        # Best-effort cleanup for any lingering players by pattern
-        pkill -9 -f "mpg123.*ambience" 2>/dev/null || true
-        pkill -9 -f "mpg123.*background" 2>/dev/null || true
-        pkill -9 -f "paplay.*ambience" 2>/dev/null || true
-        pkill -9 -f "paplay.*background" 2>/dev/null || true
-        pkill -9 -f "aplay.*ambience" 2>/dev/null || true
-        pkill -9 -f "aplay.*background" 2>/dev/null || true
-        pkill -9 -f "cvlc.*ambience" 2>/dev/null || true
-        
-        # PipeWire-specific: kill pw-play processes if they exist
-        pkill -9 -f "pw-play.*ambience" 2>/dev/null || true
-        pkill -9 -f "pw-play.*background" 2>/dev/null || true
+        # Start/stop sound effects
+        pkill -9 -f "mpg123.*start\." 2>/dev/null
+        pkill -9 -f "mpg123.*stop\." 2>/dev/null
+        pkill -9 -f "paplay.*start\." 2>/dev/null
+        pkill -9 -f "paplay.*stop\." 2>/dev/null
+        pkill -9 -f "aplay.*start\." 2>/dev/null
+        pkill -9 -f "aplay.*stop\." 2>/dev/null
+        pkill -9 -f "pw-play.*start\." 2>/dev/null
+        pkill -9 -f "pw-play.*stop\." 2>/dev/null
         
         clear
     }
@@ -531,7 +540,7 @@ pomodoro() {
                                      display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
                                 r|R) seconds=$duration; paused=0; display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
                                 m|M) toggle_background_music; display_timer $((seconds/60)) $((seconds%60)) "⏸ Paused" $session_count "$type" $msg_idx ;;
-                                q|Q) clear; exit 0 ;;
+                                q|Q) cleanup; exit 0 ;;
                                 *) ;;
                             esac
                         done
@@ -541,7 +550,7 @@ pomodoro() {
                     ;;
                 r|R) seconds=$duration; last_update=$(date +%s); last_second=$seconds; display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
                 m|M) toggle_background_music; display_timer $((seconds/60)) $((seconds%60)) "$status" $session_count "$type" $msg_idx ;;
-                q|Q) clear; exit 0 ;;
+                q|Q) cleanup; exit 0 ;;
                 *) ;;
             esac
 
@@ -585,7 +594,7 @@ pomodoro() {
 
 clear
 echo "${CYAN}╔════════════════════════════════════════╗${NC}"
-echo "${CYAN}║         Welcome to Bashdoro!          ║${NC}"
+echo "${CYAN}║         Welcome to Bashdoro!           ║${NC}"
 echo "${CYAN}╚════════════════════════════════════════╝${NC}"
 echo
 
